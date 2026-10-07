@@ -53,6 +53,42 @@ ${clean(oldGame, 9000)}
 `;
 }
 
+function validateGeneratedHTML(html){
+  const scripts = [...String(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
+  for (const code of scripts) {
+    if (code.trim()) new Function(code);
+  }
+}
+
+async function repairGame(game, errorText){
+  const repairPrompt = `${SYSTEM}
+
+The HTML game below has a JavaScript SYNTAX ERROR and cannot start.
+Repair the supplied game and return ONLY one complete corrected HTML document.
+Do not redesign the game or change its educational objective.
+All JavaScript must compile without syntax errors. Keep it self-contained with inline CSS and JavaScript.
+The START GAME button must use addEventListener after DOMContentLoaded and must actually start the game.
+Do not use external resources, storage, network requests, or inline onclick handlers.
+
+Syntax error reported by the browser:
+${clean(errorText, 700)}
+
+Broken game:
+${clean(game, 14000)}`;
+  const response = await fetch("https://text.pollinations.ai/", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({model:"openai", messages:[{role:"system",content:SYSTEM},{role:"user",content:repairPrompt}], private:true})
+  });
+  const raw = await response.text();
+  if(!response.ok) throw new Error("The AI repair service is busy right now. Please try again.");
+  let fixed=raw;
+  try{ const data=JSON.parse(raw); fixed=data?.choices?.[0]?.message?.content || data?.content || raw; }catch(_){ }
+  fixed=String(fixed).replace(/^\s*```html/i,"").replace(/^\s*```/i,"").replace(/```\s*$/i,"").trim();
+  if(!fixed.toLowerCase().includes("<html") && !fixed.toLowerCase().includes("<!doctype")) throw new Error("The AI repair did not return a complete game.");
+  return fixed;
+}
+
 async function generate(extra=""){
   const p = plan();
   const prompt = makePrompt(p, extra, extra ? currentGame : "");
@@ -89,9 +125,22 @@ async function generate(extra=""){
   }
 
   // Keep generated games self-contained and compatible with the sandbox.
-  // If the model accidentally adds storage/network code, neutralize it before running.
   game = game.replace(/\b(localStorage|sessionStorage)\b/g, "__blockedStorage");
-  game = game.replace(/<script[^>]+src=[\"'][^\"']+[\"'][^>]*><\/script>/gi, "");
+  game = game.replace(/<script[^>]+src=["'][^"']+["'][^>]*><\/script>/gi, "");
+
+  // Validate syntax before showing the game. If the AI made a syntax mistake,
+  // automatically send the exact error back to the AI for repair.
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      validateGeneratedHTML(game);
+      break;
+    }catch(err){
+      if(attempt===1) throw new Error("The AI generated invalid JavaScript. Please press Create My Game again.");
+      game = await repairGame(game, err.message);
+      game = game.replace(/\b(localStorage|sessionStorage)\b/g, "__blockedStorage");
+      game = game.replace(/<script[^>]+src=["'][^"']+["'][^>]*><\/script>/gi, "");
+    }
+  }
 
   return game;
 }
