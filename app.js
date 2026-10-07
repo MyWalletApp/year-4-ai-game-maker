@@ -4,8 +4,8 @@ let currentGame = "";
 const SYSTEM = `You create safe, simple educational browser games for Year 4 children (age about 8-10).
 Return ONLY one complete self-contained HTML document. No markdown fences, no explanations.
 Use only inline HTML, CSS and JavaScript. Do not load external scripts, images, fonts, APIs or websites.
-The game must be playable with mouse and touch on a tablet, with large buttons and readable text. Use normal DOM click/touch handlers; avoid relying on blocked browser features such as popups, external resources, or navigation.
-Use the student's plan faithfully. Include a clear start/restart control, score, win/finish state and simple feedback.
+The game must be playable with mouse and touch on a tablet, with large buttons and readable text. Use normal DOM click/touch handlers; attach them after the DOM is ready. Avoid localStorage, sessionStorage, cookies, popups, external resources, APIs, navigation, parent/top window access, and other browser features that may be blocked in an embedded game. Never make the game depend on any of those features.
+Use the student's plan faithfully. Include a clear Start Game button that MUST visibly begin the game when clicked, plus a Restart button, score, win/finish state and simple feedback. Test the button logic mentally before returning the HTML. Put game JavaScript at the end of the body or inside DOMContentLoaded so the controls definitely exist before listeners are attached.
 Keep mechanics simple enough for Year 4. Never include ads, purchases, chat, external links, personal-data collection, login forms, violence, scary content, gambling or inappropriate material.
 The game should teach/practise the stated learning objective, not merely display information.
 Do not ask for or display a child's name, email, photo, school login or other personal information.
@@ -86,6 +86,31 @@ async function generate(extra=""){
   return game;
 }
 
+
+function prepareGame(html){
+  // Make AI-generated games more reliable when embedded: move classic scripts
+  // to the end of <body> so they run after game controls exist.
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const body = doc.body || doc.documentElement;
+    if(body){
+      [...doc.querySelectorAll("script")].forEach(script => {
+        // Keep script contents/attributes intact; moving them prevents the
+        // common "button exists later but listener was attached too early" bug.
+        body.appendChild(script);
+      });
+    }
+    return "<!doctype html>\n" + doc.documentElement.outerHTML;
+  } catch(e){
+    return html;
+  }
+}
+
+function showGame(html){
+  currentGame = prepareGame(html);
+  $("game").srcdoc = currentGame;
+}
+
 $("create").onclick = async () => {
   const p = plan();
   if(!valid(p)){
@@ -97,8 +122,7 @@ $("create").onclick = async () => {
   $("status").textContent = "🤖 Creating your game... This may take a little while.";
 
   try{
-    currentGame = await generate();
-    $("game").srcdoc = currentGame;
+    showGame(await generate());
     $("planner").classList.add("hidden");
     $("gameSection").classList.remove("hidden");
     $("status").textContent = "";
@@ -117,8 +141,7 @@ $("improve").onclick = async () => {
   $("improveStatus").textContent = "🛠️ Improving your game...";
 
   try{
-    currentGame = await generate(c);
-    $("game").srcdoc = currentGame;
+    showGame(await generate(c));
     $("change").value = "";
     $("improveStatus").textContent = "✅ Updated! Play it again and test your changes.";
   }catch(e){
