@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Year 4 AI Game Maker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="logo">🎮</div>
+  <div>
+    <h1>Year 4 AI Game Maker</h1>
+    <p>Turn your approved game plan into a real game!</p>
+  </div>
+</header>
+
+<main>
+<section id="planner" class="card">
+  <div class="step">STEP 1 · YOUR APPROVED PLAN</div>
+  <h2>Tell the AI about your game</h2>
+  <p class="hint">Work with your group. Use the planning sheet your teacher approved.</p>
+
+  <div class="grid">
+    <label>Game name
+      <input id="name" placeholder="e.g. Space Maths Adventure">
+    </label>
+    <label>Learning objective
+      <input id="objective" placeholder="What will players learn?">
+    </label>
+    <label>Characters
+      <input id="characters" placeholder="Who is in the game?">
+    </label>
+    <label>Number of players
+      <select id="players">
+        <option>1</option>
+        <option>2</option>
+        <option>2 or more</option>
+      </select>
+    </label>
+    <label class="wide">How do players score points?
+      <textarea id="scoring" placeholder="e.g. Correct answer = 10 points"></textarea>
+    </label>
+    <label class="wide">Describe how the game works
+      <textarea id="description" rows="5" placeholder="Explain what the player does, how they win, levels, challenges, rewards, etc."></textarea>
+    </label>
+  </div>
+
+  <button id="create" class="primary">✨ CREATE MY GAME</button>
+  <div id="status" class="status"></div>
+</section>
+
+<section id="gameSection" class="card hidden">
+  <div class="gameTop">
+    <div>
+      <div class="step">STEP 2 · PLAY & TEST</div>
+      <h2>Your game is ready!</h2>
+    </div>
+    <button id="back" class="secondary">← Back to plan</button>
+  </div>
+
+  <div class="gameWrap">
+    <iframe id="game" title="Student game" sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"></iframe>
+  </div>
+
+  <div class="improve">
+    <div class="step">STEP 3 · IMPROVE</div>
+    <h3>What would you like to change?</h3>
+    <div class="improveRow">
+      <input id="change" placeholder="e.g. Add 3 lives and make the questions easier">
+      <button id="improve" class="primary">🛠️ IMPROVE MY GAME</button>
+    </div>
+    <p class="hint">Test your game first. Then tell the AI one or two changes.</p>
+    <div id="improveStatus" class="status"></div>
+  </div>
+</section>
+</main>
+
+<footer>Made for Year 4 • Be creative • Test • Improve • Have fun! 🌟</footer>
+<script src="app.js"></script>
+</body>
+</html>

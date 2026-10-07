@@ -1,0 +1,38 @@
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f8ff;color:#17223b}
+header{background:linear-gradient(135deg,#4f7cff,#7b61ff);color:white;padding:24px clamp(18px,5vw,70px);display:flex;gap:16px;align-items:center}
+.logo{font-size:42px}
+h1{margin:0;font-size:clamp(26px,4vw,40px)}
+header p{margin:5px 0 0;font-size:17px}
+main{max-width:1050px;margin:28px auto;padding:0 16px}
+.card{background:white;border-radius:20px;padding:26px;box-shadow:0 8px 30px #22305a14;margin-bottom:22px}
+.step{font-size:12px;font-weight:800;letter-spacing:1.3px;color:#5a65d8;margin-bottom:8px}
+h2{margin:0 0 8px;font-size:28px}
+h3{margin:5px 0 12px}
+.hint{color:#667085}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0}
+label{font-weight:700;font-size:14px}
+input,textarea,select{display:block;width:100%;margin-top:7px;border:2px solid #e4e8f0;border-radius:12px;padding:12px;font:inherit;color:#17223b;background:#fff}
+textarea{resize:vertical}
+.wide{grid-column:1/-1}
+.primary,.secondary{border:0;border-radius:12px;padding:13px 18px;font-weight:800;font-size:15px;cursor:pointer}
+.primary{background:#536dfe;color:white}
+.secondary{background:#edf1ff;color:#3e50bf}
+.primary:disabled{opacity:.6;cursor:wait}
+.status{margin-top:13px;min-height:22px;color:#5d6475}
+.hidden{display:none}
+.gameTop{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}
+.gameWrap{margin-top:18px;border:3px solid #e8ebf5;border-radius:16px;overflow:hidden;background:#fff;min-height:480px}
+.gameWrap iframe{display:block;width:100%;height:600px;border:0}
+.improve{margin-top:24px;padding-top:22px;border-top:2px solid #edf0f6}
+.improveRow{display:flex;gap:10px}
+.improveRow input{margin:0;flex:1}
+.improveRow button{white-space:nowrap}
+footer{text-align:center;color:#697386;padding:10px 20px 30px}
+@media(max-width:700px){
+  .grid{grid-template-columns:1fr}
+  .wide{grid-column:auto}
+  .gameTop{flex-direction:column}
+  .improveRow{flex-direction:column}
+  .gameWrap iframe{height:560px}
+}
