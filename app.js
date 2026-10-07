@@ -1,5 +1,80 @@
 const $ = id => document.getElementById(id);
 let currentGame = null;
+let currentPlan = null;
+let currentSavedId = null;
+const STORAGE_KEY = "year4-ai-game-maker-saved-v2";
+
+function getSavedGames(){
+  try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch(_){return [];}
+}
+function setSavedGames(list){localStorage.setItem(STORAGE_KEY,JSON.stringify(list.slice(0,50)));}
+function saveCurrentGame(){
+  if(!currentGame || !currentPlan) return;
+  const list=getSavedGames();
+  const item={
+    id: currentSavedId || ("g_"+Date.now()+"_"+Math.random().toString(36).slice(2,8)),
+    name: currentPlan.name || currentGame.title || "My Game",
+    plan: currentPlan,
+    game: currentGame,
+    updatedAt:new Date().toISOString()
+  };
+  currentSavedId=item.id;
+  const idx=list.findIndex(x=>x.id===item.id);
+  if(idx>=0) list[idx]=item; else list.unshift(item);
+  setSavedGames(list);
+  renderSavedGames();
+}
+function deleteSavedGame(id){
+  setSavedGames(getSavedGames().filter(x=>x.id!==id));
+  if(currentSavedId===id) currentSavedId=null;
+  renderSavedGames();
+}
+function openSavedGame(id){
+  const item=getSavedGames().find(x=>x.id===id); if(!item)return;
+  currentSavedId=item.id; currentPlan=item.plan; currentGame=item.game;
+  $("game").srcdoc=buildGameHTML(item.game,item.plan.players);
+  $("planner").classList.add("hidden"); $("gameSection").classList.remove("hidden");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function encodeShared(obj){
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj))))
+    .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function decodeShared(str){
+  str=str.replace(/-/g,"+").replace(/_/g,"/");
+  while(str.length%4)str+="=";
+  return JSON.parse(decodeURIComponent(escape(atob(str))));
+}
+function shareCurrentGame(){
+  if(!currentGame || !currentPlan)return;
+  const payload={plan:currentPlan,game:currentGame};
+  const url=location.origin+location.pathname+"#game="+encodeShared(payload);
+  navigator.clipboard?.writeText(url).then(
+    ()=>{$("shareStatus").textContent="✅ Share link copied! Send it to your classmates.";},
+    ()=>{prompt("Copy this game link:",url);}
+  );
+}
+function loadSharedGame(){
+  const m=location.hash.match(/^#game=(.+)$/);
+  if(!m)return false;
+  try{
+    const payload=decodeShared(m[1]);
+    if(!payload?.game||!payload?.plan)return false;
+    currentPlan=payload.plan; currentGame=payload.game; currentSavedId=null;
+    $("game").srcdoc=buildGameHTML(payload.game,payload.plan.players);
+    $("planner").classList.add("hidden"); $("gameSection").classList.remove("hidden");
+    $("shareStatus").textContent="🔗 Shared game loaded. You can play it here.";
+    return true;
+  }catch(_){return false;}
+}
+function renderSavedGames(){
+  const box=$("savedList"); if(!box)return;
+  const list=getSavedGames();
+  if(!list.length){box.innerHTML='<p class="hint">No saved games yet. Create a game and it will appear here.</p>';return;}
+  box.innerHTML=list.map(item=>'<div class="savedItem"><div><strong>'+esc(item.name)+'</strong><div class="savedDate">'+new Date(item.updatedAt).toLocaleString()+'</div></div><div class="savedActions"><button class="secondary" data-play="'+item.id+'">PLAY</button><button class="danger" data-delete="'+item.id+'">DELETE</button></div></div>').join("");
+  box.querySelectorAll("[data-play]").forEach(b=>b.onclick=()=>openSavedGame(b.dataset.play));
+  box.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deleteSavedGame(b.dataset.delete));
+}
 
 const SYSTEM = `You create simple, safe educational browser games for Year 4 children (age 8-10).
 You are NOT writing HTML or JavaScript. Return ONLY valid JSON matching the schema below. No markdown, no code fences, no extra text.
@@ -52,9 +127,13 @@ renderStart();
 }
 
 async function generate(extra=""){
- const p=plan();const game=await askAI(promptFor(p,extra,extra?currentGame:null));currentGame=game;return buildGameHTML(game,Math.max(1,Math.min(2,game.players?Number(game.players):String(p.players).startsWith("2")?2:1)));
+ const p=plan(); currentPlan=p;const game=await askAI(promptFor(p,extra,extra?currentGame:null));currentGame=game;return buildGameHTML(game,Math.max(1,Math.min(2,game.players?Number(game.players):String(p.players).startsWith("2")?2:1)));
 }
 
-$("create").onclick=async()=>{const p=plan();if(!valid(p)){$("status").textContent="Please complete all the boxes before creating your game.";return;}$("create").disabled=true;$("status").textContent="🤖 Creating your game...";try{$("game").srcdoc=await generate();$("planner").classList.add("hidden");$("gameSection").classList.remove("hidden");$("status").textContent="";}catch(e){$("status").textContent="⚠️ "+e.message;}finally{$("create").disabled=false;}};
-$("improve").onclick=async()=>{const c=$("change").value.trim();if(!c||!currentGame)return;$("improve").disabled=true;$("improveStatus").textContent="🛠️ Improving your game...";try{$("game").srcdoc=await generate(c);$("change").value="";$("improveStatus").textContent="✅ Updated!";}catch(e){$("improveStatus").textContent="⚠️ "+e.message;}finally{$("improve").disabled=false;}};
+$("create").onclick=async()=>{const p=plan();if(!valid(p)){$("status").textContent="Please complete all the boxes before creating your game.";return;}$("create").disabled=true;$("status").textContent="🤖 Creating your game...";try{$("game").srcdoc=await generate();currentSavedId=null;saveCurrentGame();$("planner").classList.add("hidden");$("gameSection").classList.remove("hidden");$("status").textContent="";}catch(e){$("status").textContent="⚠️ "+e.message;}finally{$("create").disabled=false;}};
+$("improve").onclick=async()=>{const c=$("change").value.trim();if(!c||!currentGame)return;$("improve").disabled=true;$("improveStatus").textContent="🛠️ Improving your game...";try{$("game").srcdoc=await generate(c);saveCurrentGame();$("change").value="";$("improveStatus").textContent="✅ Updated!";}catch(e){$("improveStatus").textContent="⚠️ "+e.message;}finally{$("improve").disabled=false;}};
 $("back").onclick=()=>{$("gameSection").classList.add("hidden");$("planner").classList.remove("hidden");};
+$("share").onclick=shareCurrentGame;
+
+renderSavedGames();
+loadSharedGame();

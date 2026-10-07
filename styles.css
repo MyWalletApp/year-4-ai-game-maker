@@ -36,3 +36,13 @@ footer{text-align:center;color:#697386;padding:10px 20px 30px}
   .improveRow{flex-direction:column}
   .gameWrap iframe{height:560px}
 }
+
+.savedCard{margin-bottom:22px}
+.savedItem{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid #edf0f6}
+.savedItem:last-child{border-bottom:0}
+.savedDate{font-size:12px;color:#7a8292;margin-top:4px}
+.savedActions{display:flex;gap:8px}
+.danger{border:0;border-radius:10px;padding:10px 13px;font-weight:800;font-size:12px;cursor:pointer;background:#fff0f0;color:#c43d3d}
+.gameActions{display:flex;align-items:center;gap:12px;margin-top:18px}
+.gameActions .status{margin:0}
+@media(max-width:700px){.savedItem{align-items:flex-start;flex-direction:column}.savedActions{width:100%}.gameActions{align-items:flex-start;flex-direction:column}}
