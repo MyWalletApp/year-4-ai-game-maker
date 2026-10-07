@@ -1,193 +1,60 @@
 const $ = id => document.getElementById(id);
-let currentGame = "";
+let currentGame = null;
 
-const SYSTEM = `You create safe, simple educational browser games for Year 4 children (age about 8-10).
-Return ONLY one complete self-contained HTML document. No markdown fences, no explanations.
-Use only inline HTML, CSS and JavaScript. Do not load external scripts, images, fonts, APIs or websites.
-Do not use localStorage, sessionStorage, IndexedDB, cookies, fetch, XMLHttpRequest, WebSocket, window.top, window.parent, window.open, or page navigation.
-Do not use inline event handlers such as onclick if avoidable; attach event listeners after DOMContentLoaded.
-Make every interactive control work without any external resource or browser storage.
-The game must be playable with mouse and touch on a tablet, with large buttons and readable text.
-Use the student's plan faithfully. Include a clear start/restart control, score, win/finish state and simple feedback.
-The START GAME button MUST have a working event listener that is attached after the DOM is ready. When START GAME is clicked, hide the setup screen and immediately begin the game. Test the button logic in your generated code before returning it.
-Keep mechanics simple enough for Year 4. Never include ads, purchases, chat, external links, personal-data collection, login forms, violence, scary content, gambling or inappropriate material.
-The game should teach/practise the stated learning objective, not merely display information.
-Do not ask for or display a child's name, email, photo, school login or other personal information.
-For an improvement request, keep the same educational objective and improve the supplied game when possible.`;
+const SYSTEM = `You create simple, safe educational browser games for Year 4 children (age 8-10).
+You are NOT writing HTML or JavaScript. Return ONLY valid JSON matching the schema below. No markdown, no code fences, no extra text.
+The game must be playable as a simple turn-based educational quiz using multiple-choice questions.
+Use the student's plan faithfully. Make questions directly practise the learning objective.
+Schema:
+{
+  "title": string,
+  "instructions": string,
+  "pointsPerCorrect": number,
+  "questions": [
+    {"question": string, "options": [string,string,string,string], "answer": number, "explanation": string}
+  ]
+}
+Rules: exactly 6 questions; exactly 4 options per question; answer is 0,1,2,or 3; pointsPerCorrect is 5,10,15,20,or 25; no personal information; no external resources; no violence, gambling, ads, purchases, login, chat, or scary content.`;
 
-function plan(){
-  return {
-    name: $("name").value.trim(),
-    objective: $("objective").value.trim(),
-    characters: $("characters").value.trim(),
-    players: $("players").value,
-    scoring: $("scoring").value.trim(),
-    description: $("description").value.trim()
-  };
+function plan(){return {name:$("name").value.trim(),objective:$("objective").value.trim(),characters:$("characters").value.trim(),players:$("players").value,scoring:$("scoring").value.trim(),description:$("description").value.trim()};}
+function valid(p){return p.name&&p.objective&&p.characters&&p.scoring&&p.description;}
+function clean(s,n=2500){return String(s||"").slice(0,n);}
+function promptFor(p,extra="",old=null){return `${SYSTEM}\n\nApproved plan:\nGame name: ${clean(p.name)}\nLearning objective: ${clean(p.objective)}\nCharacters: ${clean(p.characters)}\nPlayers: ${clean(p.players)}\nScoring: ${clean(p.scoring)}\nHow it works: ${clean(p.description)}\n\n${extra?`Improvement request: ${clean(extra,700)}\nExisting game JSON: ${JSON.stringify(old)}`:"Create a new game."}`;}
+
+async function askAI(prompt){
+ const response=await fetch("https://text.pollinations.ai/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"openai",messages:[{role:"system",content:SYSTEM},{role:"user",content:prompt}],private:true})});
+ const raw=await response.text();
+ if(!response.ok) throw new Error("The free AI service is busy right now. Please try again.");
+ let text=raw; try{const d=JSON.parse(raw);text=d?.choices?.[0]?.message?.content||d?.content||raw;}catch(_){ }
+ text=String(text).replace(/^\s*```(?:json)?/i,"").replace(/```\s*$/i,"").trim();
+ const a=text.indexOf("{"); const b=text.lastIndexOf("}"); if(a<0||b<=a) throw new Error("The AI did not return a valid game. Please try again.");
+ let game; try{game=JSON.parse(text.slice(a,b+1));}catch(e){throw new Error("The AI returned invalid game data. Please try again.");}
+ if(!game.title||!Array.isArray(game.questions)||game.questions.length<4) throw new Error("The AI returned an incomplete game. Please try again.");
+ game.questions=game.questions.slice(0,6).map(q=>({question:String(q.question||"Question"),options:Array.isArray(q.options)?q.options.slice(0,4).map(String):[],answer:Number(q.answer),explanation:String(q.explanation||"")})).filter(q=>q.options.length===4&&q.answer>=0&&q.answer<4);
+ if(game.questions.length<4) throw new Error("The AI returned incomplete questions. Please try again.");
+ game.pointsPerCorrect=[5,10,15,20,25].includes(Number(game.pointsPerCorrect))?Number(game.pointsPerCorrect):10;
+ return game;
 }
 
-function valid(p){
-  return p.name && p.objective && p.characters && p.scoring && p.description;
-}
-
-function clean(s, n=1800){
-  return String(s || "").slice(0, n);
-}
-
-function makePrompt(p, extra="", oldGame=""){
-  return `${SYSTEM}
-
-Create the game from this approved Year 4 plan:
-
-Game name: ${clean(p.name)}
-Learning objective: ${clean(p.objective)}
-Characters: ${clean(p.characters)}
-Players: ${clean(p.players)}
-Scoring: ${clean(p.scoring)}
-How it works: ${clean(p.description)}
-
-Improvement request: ${clean(extra, 500)}
-
-If an existing game is supplied below, improve it rather than changing the learning objective:
-${clean(oldGame, 9000)}
-`;
-}
-
-function validateGeneratedHTML(html){
-  const scripts = [...String(html).matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
-  for (const code of scripts) {
-    if (code.trim()) new Function(code);
-  }
-}
-
-async function repairGame(game, errorText){
-  const repairPrompt = `${SYSTEM}
-
-The HTML game below has a JavaScript SYNTAX ERROR and cannot start.
-Repair the supplied game and return ONLY one complete corrected HTML document.
-Do not redesign the game or change its educational objective.
-All JavaScript must compile without syntax errors. Keep it self-contained with inline CSS and JavaScript.
-The START GAME button must use addEventListener after DOMContentLoaded and must actually start the game.
-Do not use external resources, storage, network requests, or inline onclick handlers.
-
-Syntax error reported by the browser:
-${clean(errorText, 700)}
-
-Broken game:
-${clean(game, 14000)}`;
-  const response = await fetch("https://text.pollinations.ai/", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({model:"openai", messages:[{role:"system",content:SYSTEM},{role:"user",content:repairPrompt}], private:true})
-  });
-  const raw = await response.text();
-  if(!response.ok) throw new Error("The AI repair service is busy right now. Please try again.");
-  let fixed=raw;
-  try{ const data=JSON.parse(raw); fixed=data?.choices?.[0]?.message?.content || data?.content || raw; }catch(_){ }
-  fixed=String(fixed).replace(/^\s*```html/i,"").replace(/^\s*```/i,"").replace(/```\s*$/i,"").trim();
-  if(!fixed.toLowerCase().includes("<html") && !fixed.toLowerCase().includes("<!doctype")) throw new Error("The AI repair did not return a complete game.");
-  return fixed;
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\\"/g,"&quot;").replace(/'/g,"&#39;");}
+function buildGameHTML(game,players){
+ const data=JSON.stringify({title:game.title,instructions:game.instructions,pointsPerCorrect:game.pointsPerCorrect,questions:game.questions,players});
+ return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
+body{margin:0;font-family:Arial,sans-serif;background:#f4f7ff;color:#17223b}.wrap{max-width:760px;margin:auto;padding:22px}.screen{background:white;border-radius:18px;padding:24px;box-shadow:0 6px 25px #0001}.title{font-size:30px;font-weight:800;margin-bottom:8px}.sub{color:#667085;line-height:1.5}.score{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.pill{background:#edf1ff;border-radius:999px;padding:8px 12px;font-weight:700}.question{font-size:23px;font-weight:800;line-height:1.35;margin:18px 0}.options{display:grid;gap:10px}.opt{border:2px solid #dfe5f2;background:#fff;border-radius:12px;padding:13px;text-align:left;font-size:17px;cursor:pointer}.opt:hover{background:#f4f7ff}.msg{margin-top:14px;font-weight:700;min-height:24px}.start,.next,.restart{border:0;border-radius:12px;padding:13px 20px;background:#536dfe;color:#fff;font-weight:800;font-size:16px;cursor:pointer}.next{margin-top:14px}.hidden{display:none}.finish{text-align:center}.big{font-size:25px;font-weight:800}.small{color:#667085;margin-top:8px}</style></head><body><div class="wrap"><div id="app"></div></div><script>
+const GAME=${data};const root=document.getElementById('app');let q=0;let scores=GAME.players.map(()=>0);let started=false;let answered=false;
+function renderStart(){root.innerHTML='<div class="screen"><div class="title">'+GAME.title+'</div><div class="sub">'+GAME.instructions+'</div><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': 0</span>').join('')+'</div><button class="start" id="startBtn">START GAME</button></div>';document.getElementById('startBtn').addEventListener('click',startGame);}
+function startGame(){started=true;q=0;answered=false;renderQuestion();}
+function renderQuestion(){if(q>=GAME.questions.length){finish();return;}answered=false;const item=GAME.questions[q];const turn=q%GAME.players.length;root.innerHTML='<div class="screen"><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': '+scores[i]+'</span>').join('')+'</div><div class="sub">Question '+(q+1)+' of '+GAME.questions.length+' · Player '+(turn+1)+' turn</div><div class="question">'+item.question+'</div><div class="options">'+item.options.map((o,i)=>'<button class="opt" data-i="'+i+'">'+o+'</button>').join('')+'</div><div class="msg" id="msg"></div><button class="next hidden" id="nextBtn">NEXT QUESTION</button></div>';document.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>answer(Number(b.dataset.i))));}
+function answer(i){if(answered)return;answered=true;const item=GAME.questions[q];const turn=q%GAME.players.length;const msg=document.getElementById('msg');if(i===item.answer){scores[turn]+=GAME.pointsPerCorrect;msg.textContent='Correct! +'+GAME.pointsPerCorrect+' points. '+item.explanation;}else{msg.textContent='Not quite. '+item.explanation;}document.querySelectorAll('.opt').forEach(b=>b.disabled=true);const n=document.getElementById('nextBtn');n.classList.remove('hidden');n.addEventListener('click',()=>{q++;renderQuestion();},{once:true});}
+function finish(){const best=Math.max(...scores);root.innerHTML='<div class="screen finish"><div class="big">🎉 Game finished!</div><div class="score">'+scores.map((s,i)=>'<span class="pill">Player '+(i+1)+': '+s+' points</span>').join('')+'</div><div class="sub">'+(scores.filter(s=>s===best).length>1?'Great job! It is a tie!':'Player '+(scores.indexOf(best)+1)+' wins!')+'</div><br><button class="restart" id="restartBtn">PLAY AGAIN</button></div>';document.getElementById('restartBtn').addEventListener('click',()=>{scores=GAME.players.map(()=>0);renderStart();});}
+renderStart();
+</script></body></html>`;
 }
 
 async function generate(extra=""){
-  const p = plan();
-  const prompt = makePrompt(p, extra, extra ? currentGame : "");
-  const response = await fetch("https://text.pollinations.ai/", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      model: "openai",
-      messages: [
-        {role:"system", content:SYSTEM},
-        {role:"user", content: prompt}
-      ],
-      private: true
-    })
-  });
-
-  const raw = await response.text();
-  if(!response.ok) throw new Error("The free AI service is busy right now. Please wait a little and try again.");
-
-  let game = raw;
-  try{
-    const data = JSON.parse(raw);
-    game = data?.choices?.[0]?.message?.content || data?.content || raw;
-  }catch(_){}
-
-  game = String(game)
-    .replace(/^\s*```html/i,"")
-    .replace(/^\s*```/i,"")
-    .replace(/```\s*$/,"")
-    .trim();
-
-  if(!game.toLowerCase().includes("<html") && !game.toLowerCase().includes("<!doctype")){
-    throw new Error("The AI did not return a complete game. Please try again.");
-  }
-
-  // Keep generated games self-contained and compatible with the sandbox.
-  game = game.replace(/\b(localStorage|sessionStorage)\b/g, "__blockedStorage");
-  game = game.replace(/<script[^>]+src=["'][^"']+["'][^>]*><\/script>/gi, "");
-
-  // Validate syntax before showing the game. If the AI made a syntax mistake,
-  // automatically send the exact error back to the AI for repair.
-  for(let attempt=0; attempt<2; attempt++){
-    try{
-      validateGeneratedHTML(game);
-      break;
-    }catch(err){
-      if(attempt===1) throw new Error("The AI generated invalid JavaScript. Please press Create My Game again.");
-      game = await repairGame(game, err.message);
-      game = game.replace(/\b(localStorage|sessionStorage)\b/g, "__blockedStorage");
-      game = game.replace(/<script[^>]+src=["'][^"']+["'][^>]*><\/script>/gi, "");
-    }
-  }
-
-  return game;
+ const p=plan();const game=await askAI(promptFor(p,extra,extra?currentGame:null));currentGame=game;return buildGameHTML(game,Math.max(1,Math.min(2,game.players?Number(game.players):String(p.players).startsWith("2")?2:1)));
 }
 
-$("create").onclick = async () => {
-  const p = plan();
-  if(!valid(p)){
-    $("status").textContent = "Please complete all the boxes before creating your game.";
-    return;
-  }
-
-  $("create").disabled = true;
-  $("status").textContent = "🤖 Creating your game... This may take a little while.";
-
-  try{
-    currentGame = await generate();
-    $("game").srcdoc = currentGame;
-    $("planner").classList.add("hidden");
-    $("gameSection").classList.remove("hidden");
-    $("status").textContent = "";
-  }catch(e){
-    $("status").textContent = "⚠️ " + e.message;
-  }finally{
-    $("create").disabled = false;
-  }
-};
-
-$("improve").onclick = async () => {
-  const c = $("change").value.trim();
-  if(!c) return;
-
-  $("improve").disabled = true;
-  $("improveStatus").textContent = "🛠️ Improving your game...";
-
-  try{
-    currentGame = await generate(c);
-    $("game").srcdoc = currentGame;
-    $("change").value = "";
-    $("improveStatus").textContent = "✅ Updated! Play it again and test your changes.";
-  }catch(e){
-    $("improveStatus").textContent = "⚠️ " + e.message;
-  }finally{
-    $("improve").disabled = false;
-  }
-};
-
-$("back").onclick = () => {
-  $("gameSection").classList.add("hidden");
-  $("planner").classList.remove("hidden");
-};
+$("create").onclick=async()=>{const p=plan();if(!valid(p)){$("status").textContent="Please complete all the boxes before creating your game.";return;}$("create").disabled=true;$("status").textContent="🤖 Creating your game...";try{$("game").srcdoc=await generate();$("planner").classList.add("hidden");$("gameSection").classList.remove("hidden");$("status").textContent="";}catch(e){$("status").textContent="⚠️ "+e.message;}finally{$("create").disabled=false;}};
+$("improve").onclick=async()=>{const c=$("change").value.trim();if(!c||!currentGame)return;$("improve").disabled=true;$("improveStatus").textContent="🛠️ Improving your game...";try{$("game").srcdoc=await generate(c);$("change").value="";$("improveStatus").textContent="✅ Updated!";}catch(e){$("improveStatus").textContent="⚠️ "+e.message;}finally{$("improve").disabled=false;}};
+$("back").onclick=()=>{$("gameSection").classList.add("hidden");$("planner").classList.remove("hidden");};
