@@ -4,8 +4,12 @@ let currentGame = "";
 const SYSTEM = `You create safe, simple educational browser games for Year 4 children (age about 8-10).
 Return ONLY one complete self-contained HTML document. No markdown fences, no explanations.
 Use only inline HTML, CSS and JavaScript. Do not load external scripts, images, fonts, APIs or websites.
-The game must be playable with mouse and touch on a tablet, with large buttons and readable text. Use normal DOM click/touch handlers; attach them after the DOM is ready. Avoid localStorage, sessionStorage, cookies, popups, external resources, APIs, navigation, parent/top window access, and other browser features that may be blocked in an embedded game. Never make the game depend on any of those features.
-Use the student's plan faithfully. Include a clear Start Game button that MUST visibly begin the game when clicked, plus a Restart button, score, win/finish state and simple feedback. Test the button logic mentally before returning the HTML. Put game JavaScript at the end of the body or inside DOMContentLoaded so the controls definitely exist before listeners are attached.
+Do not use localStorage, sessionStorage, IndexedDB, cookies, fetch, XMLHttpRequest, WebSocket, window.top, window.parent, window.open, or page navigation.
+Do not use inline event handlers such as onclick if avoidable; attach event listeners after DOMContentLoaded.
+Make every interactive control work without any external resource or browser storage.
+The game must be playable with mouse and touch on a tablet, with large buttons and readable text.
+Use the student's plan faithfully. Include a clear start/restart control, score, win/finish state and simple feedback.
+The START GAME button MUST have a working event listener that is attached after the DOM is ready. When START GAME is clicked, hide the setup screen and immediately begin the game. Test the button logic in your generated code before returning it.
 Keep mechanics simple enough for Year 4. Never include ads, purchases, chat, external links, personal-data collection, login forms, violence, scary content, gambling or inappropriate material.
 The game should teach/practise the stated learning objective, not merely display information.
 Do not ask for or display a child's name, email, photo, school login or other personal information.
@@ -83,32 +87,13 @@ async function generate(extra=""){
   if(!game.toLowerCase().includes("<html") && !game.toLowerCase().includes("<!doctype")){
     throw new Error("The AI did not return a complete game. Please try again.");
   }
+
+  // Keep generated games self-contained and compatible with the sandbox.
+  // If the model accidentally adds storage/network code, neutralize it before running.
+  game = game.replace(/\b(localStorage|sessionStorage)\b/g, "__blockedStorage");
+  game = game.replace(/<script[^>]+src=[\"'][^\"']+[\"'][^>]*><\/script>/gi, "");
+
   return game;
-}
-
-
-function prepareGame(html){
-  // Make AI-generated games more reliable when embedded: move classic scripts
-  // to the end of <body> so they run after game controls exist.
-  try {
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    const body = doc.body || doc.documentElement;
-    if(body){
-      [...doc.querySelectorAll("script")].forEach(script => {
-        // Keep script contents/attributes intact; moving them prevents the
-        // common "button exists later but listener was attached too early" bug.
-        body.appendChild(script);
-      });
-    }
-    return "<!doctype html>\n" + doc.documentElement.outerHTML;
-  } catch(e){
-    return html;
-  }
-}
-
-function showGame(html){
-  currentGame = prepareGame(html);
-  $("game").srcdoc = currentGame;
 }
 
 $("create").onclick = async () => {
@@ -122,7 +107,8 @@ $("create").onclick = async () => {
   $("status").textContent = "🤖 Creating your game... This may take a little while.";
 
   try{
-    showGame(await generate());
+    currentGame = await generate();
+    $("game").srcdoc = currentGame;
     $("planner").classList.add("hidden");
     $("gameSection").classList.remove("hidden");
     $("status").textContent = "";
@@ -141,7 +127,8 @@ $("improve").onclick = async () => {
   $("improveStatus").textContent = "🛠️ Improving your game...";
 
   try{
-    showGame(await generate(c));
+    currentGame = await generate(c);
+    $("game").srcdoc = currentGame;
     $("change").value = "";
     $("improveStatus").textContent = "✅ Updated! Play it again and test your changes.";
   }catch(e){
