@@ -49,10 +49,7 @@ function shareCurrentGame(){
   if(!currentGame || !currentPlan)return;
   const payload={plan:currentPlan,game:currentGame};
   const url=location.origin+location.pathname+"#game="+encodeShared(payload);
-  navigator.clipboard?.writeText(url).then(
-    ()=>{$("shareStatus").textContent="✅ Share link copied! Send it to your classmates.";},
-    ()=>{prompt("Copy this game link:",url);}
-  );
+  if(navigator.clipboard && window.isSecureContext){navigator.clipboard.writeText(url).then(()=>{$("shareStatus").textContent="✅ Share link copied! Send it to your classmates.";},()=>{window.prompt("Copy this game link:",url);});}else{window.prompt("Copy this game link:",url);}
 }
 function loadSharedGame(){
   const m=location.hash.match(/^#game=(.+)$/);
@@ -113,34 +110,20 @@ async function askAI(prompt){
 
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\\"/g,"&quot;").replace(/'/g,"&#39;");}
 function buildGameHTML(game,players){
- const rawPlayers = String(players ?? '1').trim().toLowerCase();
- const playerCount = Math.max(1, Math.min(2, /2/.test(rawPlayers) ? 2 : 1));
- const playerList = Array.isArray(game.players) && game.players.length
-   ? game.players.slice(0,2).map((x,i)=>String(x||`Player ${i+1}`))
-   : Array.from({length:playerCount},(_,i)=>`Player ${i+1}`);
- const payload = {
-   title:String(game.title||'My Game'),
-   instructions:String(game.instructions||''),
-   pointsPerCorrect:Number(game.pointsPerCorrect)||10,
-   questions:Array.isArray(game.questions)?game.questions:[],
-   players:playerList
- };
- const safeData = JSON.stringify(payload).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026');
+ const playerCount=Math.max(1,Math.min(2,Number(players)||1)); const playerList=Array.from({length:playerCount},(_,i)=>`Player ${i+1}`); const payload=JSON.stringify({title:String(game.title||'My Game'),instructions:String(game.instructions||''),pointsPerCorrect:Number(game.pointsPerCorrect)||10,questions:game.questions,players:playerList}); const data=btoa(unescape(encodeURIComponent(payload)));
  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-body{margin:0;font-family:Arial,sans-serif;background:#f4f7ff;color:#17223b}.wrap{max-width:760px;margin:auto;padding:22px}.screen{background:white;border-radius:18px;padding:24px;box-shadow:0 6px 25px #0001}.title{font-size:30px;font-weight:800;margin-bottom:8px}.sub{color:#667085;line-height:1.5}.score{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.pill{background:#edf1ff;border-radius:999px;padding:8px 12px;font-weight:700}.question{font-size:23px;font-weight:800;line-height:1.35;margin:18px 0}.options{display:grid;gap:10px}.opt{border:2px solid #dfe5f2;background:#fff;border-radius:12px;padding:13px;text-align:left;font-size:17px;cursor:pointer}.opt:hover{background:#f4f7ff}.msg{margin-top:14px;font-weight:700;min-height:24px}.start,.next,.restart{border:0;border-radius:12px;padding:13px 20px;background:#536dfe;color:#fff;font-weight:800;font-size:16px;cursor:pointer}.next{margin-top:14px}.hidden{display:none}.finish{text-align:center}.big{font-size:25px;font-weight:800}.small{color:#667085;margin-top:8px}</style></head><body><div class="wrap"><div id="app"></div></div><script id="game-data" type="application/json">${safeData}</script><script>
-(function(){
-const GAME=JSON.parse(document.getElementById('game-data').textContent||'{}');
-if(!Array.isArray(GAME.players)){const n=Math.max(1,Math.min(2,Number(GAME.players)||1));GAME.players=Array.from({length:n},(_,i)=>'Player '+(i+1));}
-const root=document.getElementById('app');let q=0;let scores=GAME.players.map(()=>0);let answered=false;
-function renderStart(){root.innerHTML='<div class="screen"><div class="title">'+GAME.title+'</div><div class="sub">'+GAME.instructions+'</div><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': 0</span>').join('')+'</div><button class="start" id="startBtn">START GAME</button></div>';document.getElementById('startBtn').onclick=startGame;}
-function startGame(){q=0;scores=GAME.players.map(()=>0);renderQuestion();}
-function renderQuestion(){if(q>=GAME.questions.length){finish();return;}answered=false;const item=GAME.questions[q]||{};const turn=q%GAME.players.length;root.innerHTML='<div class="screen"><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': '+scores[i]+'</span>').join('')+'</div><div class="sub">Question '+(q+1)+' of '+GAME.questions.length+' · Player '+(turn+1)+' turn</div><div class="question">'+String(item.question||'Question')+'</div><div class="options">'+(Array.isArray(item.options)?item.options:[]).map((o,i)=>'<button class="opt" data-i="'+i+'">'+String(o)+'</button>').join('')+'</div><div class="msg" id="msg"></div><button class="next hidden" id="nextBtn">NEXT QUESTION</button></div>';document.querySelectorAll('.opt').forEach(b=>b.onclick=()=>answer(Number(b.dataset.i)));}
-function answer(i){if(answered)return;answered=true;const item=GAME.questions[q]||{};const turn=q%GAME.players.length;const msg=document.getElementById('msg');if(i===Number(item.answer)){scores[turn]+=Number(GAME.pointsPerCorrect)||10;msg.textContent='Correct! +'+(Number(GAME.pointsPerCorrect)||10)+' points. '+(item.explanation||'');}else{msg.textContent='Not quite. '+(item.explanation||'');}document.querySelectorAll('.opt').forEach(b=>b.disabled=true);const n=document.getElementById('nextBtn');n.classList.remove('hidden');n.onclick=()=>{q++;renderQuestion();};}
-function finish(){const best=Math.max.apply(null,scores);root.innerHTML='<div class="screen finish"><div class="big">🎉 Game finished!</div><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': '+scores[i]+' points</span>').join('')+'</div><div class="sub">'+(scores.filter(s=>s===best).length>1?'Great job! It is a tie!':'Player '+(scores.indexOf(best)+1)+' wins!')+'</div><br><button class="restart" id="restartBtn">PLAY AGAIN</button></div>';document.getElementById('restartBtn').onclick=renderStart;}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f7ff;color:#17223b}.wrap{max-width:760px;margin:auto;padding:22px}.screen{background:white;border-radius:18px;padding:24px;box-shadow:0 6px 25px #0001}.title{font-size:30px;font-weight:800;margin-bottom:8px}.sub{color:#667085;line-height:1.5}.score{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}.pill{background:#edf1ff;border-radius:999px;padding:8px 12px;font-weight:700}.question{font-size:23px;font-weight:800;line-height:1.35;margin:18px 0}.options{display:grid;gap:10px}.opt{border:2px solid #dfe5f2;background:#fff;border-radius:12px;padding:13px;text-align:left;font-size:17px;cursor:pointer}.opt:hover{background:#f4f7ff}.msg{margin-top:14px;font-weight:700;min-height:24px}.start,.next,.restart{border:0;border-radius:12px;padding:13px 20px;background:#536dfe;color:#fff;font-weight:800;font-size:16px;cursor:pointer}.next{margin-top:14px}.hidden{display:none}.finish{text-align:center}.big{font-size:25px;font-weight:800}.small{color:#667085;margin-top:8px}</style></head><body><div class="wrap"><div id="app"></div></div><script>
+let GAME;try{GAME=JSON.parse(decodeURIComponent(escape(atob('${data}'))));}catch(e){document.getElementById('app').innerHTML='<div class=\"screen\"><div class=\"big\">Game could not load.</div><div class=\"small\">Please create the game again.</div></div>';throw e;}
+const root=document.getElementById('app');let q=0;let scores=GAME.players.map(()=>0);let started=false;let answered=false;
+function renderStart(){root.innerHTML='<div class="screen"><div class="title">'+GAME.title+'</div><div class="sub">'+GAME.instructions+'</div><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': 0</span>').join('')+'</div><button class="start" id="startBtn">START GAME</button></div>';document.getElementById('startBtn').addEventListener('click',startGame);}
+function startGame(){started=true;q=0;answered=false;renderQuestion();}
+function renderQuestion(){if(q>=GAME.questions.length){finish();return;}answered=false;const item=GAME.questions[q];const turn=q%GAME.players.length;root.innerHTML='<div class="screen"><div class="score">'+GAME.players.map((_,i)=>'<span class="pill">Player '+(i+1)+': '+scores[i]+'</span>').join('')+'</div><div class="sub">Question '+(q+1)+' of '+GAME.questions.length+' · Player '+(turn+1)+' turn</div><div class="question">'+item.question+'</div><div class="options">'+item.options.map((o,i)=>'<button class="opt" data-i="'+i+'">'+o+'</button>').join('')+'</div><div class="msg" id="msg"></div><button class="next hidden" id="nextBtn">NEXT QUESTION</button></div>';document.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>answer(Number(b.dataset.i))));}
+function answer(i){if(answered)return;answered=true;const item=GAME.questions[q];const turn=q%GAME.players.length;const msg=document.getElementById('msg');if(i===item.answer){scores[turn]+=GAME.pointsPerCorrect;msg.textContent='Correct! +'+GAME.pointsPerCorrect+' points. '+item.explanation;}else{msg.textContent='Not quite. '+item.explanation;}document.querySelectorAll('.opt').forEach(b=>b.disabled=true);const n=document.getElementById('nextBtn');n.classList.remove('hidden');n.addEventListener('click',()=>{q++;renderQuestion();},{once:true});}
+function finish(){const best=Math.max(...scores);root.innerHTML='<div class="screen finish"><div class="big">🎉 Game finished!</div><div class="score">'+scores.map((s,i)=>'<span class="pill">Player '+(i+1)+': '+s+' points</span>').join('')+'</div><div class="sub">'+(scores.filter(s=>s===best).length>1?'Great job! It is a tie!':'Player '+(scores.indexOf(best)+1)+' wins!')+'</div><br><button class="restart" id="restartBtn">PLAY AGAIN</button></div>';document.getElementById('restartBtn').addEventListener('click',()=>{scores=GAME.players.map(()=>0);renderStart();});}
 renderStart();
-})();
 </script></body></html>`;
 }
+
 async function generate(extra=""){
  const p=plan(); currentPlan=p;const game=await askAI(promptFor(p,extra,extra?currentGame:null));currentGame=game;return buildGameHTML(game,Math.max(1,Math.min(2,game.players?Number(game.players):String(p.players).startsWith("2")?2:1)));
 }
